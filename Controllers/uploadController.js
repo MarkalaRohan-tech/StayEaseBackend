@@ -1,68 +1,93 @@
-const  AWS  = require("aws-sdk");
+const cloudinary = require("cloudinary").v2;
 require("dotenv").config();
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION,
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const getPresignedUrl = async (req, res) => {
+const uploadImageToCloudinary = async (req, res) => {
   try {
-    const fileName = req.query.fileName;
-    const fileType = req.query.fileType;
+    const file = req.file;
 
-    if (!fileName || !fileType) {
-      return res.status(400).json({ error: "Missing fileName or fileType" });
+    if (!file) {
+      return res.status(400).json({ error: "No file provided" });
     }
 
-    const params = {
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: `HouseImg/${Date.now()}_${fileName}`,
-      ContentType: fileType,
-      Expires: 60 * 5,
-    };
+    const requestedFolder = req.body.folder || "StayEase/properties";
 
-    const uploadUrl = await s3.getSignedUrlPromise("putObject", params);
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: requestedFolder,
+          resource_type: "image",
+          transformation: [{ quality: "auto", fetch_format: "auto" }],
+        },
+        (error, uploaded) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(uploaded);
+          }
+        },
+      );
 
-    res.json({
-      uploadUrl,
-      fileUrl: `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${params.Key}`,
+      uploadStream.end(file.buffer);
     });
-  } catch (err) {
-    console.error("Error generating signed URL", err);
-    res.status(500).json({ error: "Could not generate signed URL" });
+
+    return res.status(200).json({
+      url: result.secure_url,
+      publicId: result.public_id,
+    });
+  } catch (error) {
+    console.error("Cloudinary image upload error:", error);
+    return res
+      .status(500)
+      .json({ error: "Could not upload image to Cloudinary" });
   }
 };
 
-const getProfilePresignedUrl = async (req, res) => {
+const uploadProfileImageToCloudinary = async (req, res) => {
   try {
-    const fileName = req.query.fileName;
-    const fileType = req.query.fileType;
+    const file = req.file;
 
-    if (!fileName || !fileType) {
-      return res.status(400).json({ error: "Missing fileName or fileType" });
+    if (!file) {
+      return res.status(400).json({ error: "No file provided" });
     }
 
-    const params = {
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: `profile/${Date.now()}_${fileName}`,
-      ContentType: fileType,
-      Expires: 60 * 5,
-    };
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: "StayEase/profile",
+          resource_type: "image",
+          transformation: [{ quality: "auto", fetch_format: "auto" }],
+        },
+        (error, uploaded) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(uploaded);
+          }
+        },
+      );
 
-    const uploadUrl = await s3.getSignedUrlPromise("putObject", params);
-
-    res.json({
-      uploadUrl,
-      fileUrl: `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${params.Key}`,
+      uploadStream.end(file.buffer);
     });
-  } catch (err) {
-    console.error("Error generating signed URL", err);
-    res.status(500).json({ error: "Could not generate signed URL" });
+
+    return res.status(200).json({
+      url: result.secure_url,
+      publicId: result.public_id,
+    });
+  } catch (error) {
+    console.error("Cloudinary profile image upload error:", error);
+    return res
+      .status(500)
+      .json({ error: "Could not upload profile image to Cloudinary" });
   }
 };
 
 module.exports = {
-  getPresignedUrl,
-  getProfilePresignedUrl
+  uploadImageToCloudinary,
+  uploadProfileImageToCloudinary,
 };
